@@ -1,65 +1,74 @@
-const Order = require("../../models/Order");
-const Product = require("../../models/Product");
-const ProductReview = require("../../models/Review");
+const supabase = require("../../db/supabase");
 
 const addProductReview = async (req, res) => {
   try {
-    const { productId, userId, userName, reviewMessage, reviewValue } =
-      req.body;
+    const { productId, userId, userName, reviewMessage, reviewValue } = req.body;
 
-    const order = await Order.findOne({
-      userId,
-      "cartItems.productId": productId,
-      // orderStatus: "confirmed" || "delivered",
-    });
+    // Check user has purchased the product
+    const { data: orders } = await supabase
+      .from("orders")
+      .select("id, cart_items")
+      .eq("user_id", userId);
 
-    if (!order) {
+    const hasPurchased = orders?.some((order) =>
+      order.cart_items?.some((item) => item.productId === productId)
+    );
+
+    if (!hasPurchased) {
       return res.status(403).json({
         success: false,
         message: "You need to purchase product to review it.",
       });
     }
 
-    const checkExistinfReview = await ProductReview.findOne({
-      productId,
-      userId,
-    });
+    // Check if already reviewed
+    const { data: existingReview } = await supabase
+      .from("product_reviews")
+      .select("id")
+      .eq("product_id", productId)
+      .eq("user_id", userId)
+      .single();
 
-    if (checkExistinfReview) {
+    if (existingReview) {
       return res.status(400).json({
         success: false,
         message: "You already reviewed this product!",
       });
     }
 
-    const newReview = new ProductReview({
-      productId,
-      userId,
-      userName,
-      reviewMessage,
-      reviewValue,
-    });
+    // Insert review
+    const { data: newReview, error } = await supabase
+      .from("product_reviews")
+      .insert({
+        product_id: productId,
+        user_id: userId,
+        username: userName,
+        review_message: reviewMessage,
+        review_value: reviewValue,
+      })
+      .select()
+      .single();
 
-    await newReview.save();
+    if (error) throw error;
 
-    const reviews = await ProductReview.find({ productId });
-    const totalReviewsLength = reviews.length;
+    // Recalculate average review
+    const { data: allReviews } = await supabase
+      .from("product_reviews")
+      .select("review_value")
+      .eq("product_id", productId);
+
     const averageReview =
-      reviews.reduce((sum, reviewItem) => sum + reviewItem.reviewValue, 0) /
-      totalReviewsLength;
+      allReviews.reduce((sum, r) => sum + r.review_value, 0) / allReviews.length;
 
-    await Product.findByIdAndUpdate(productId, { averageReview });
+    await supabase
+      .from("products")
+      .update({ average_review: averageReview })
+      .eq("id", productId);
 
-    res.status(201).json({
-      success: true,
-      data: newReview,
-    });
+    res.status(201).json({ success: true, data: newReview });
   } catch (e) {
     console.log(e);
-    res.status(500).json({
-      success: false,
-      message: "Error",
-    });
+    res.status(500).json({ success: false, message: "Error" });
   }
 };
 
@@ -67,17 +76,18 @@ const getProductReviews = async (req, res) => {
   try {
     const { productId } = req.params;
 
-    const reviews = await ProductReview.find({ productId });
-    res.status(200).json({
-      success: true,
-      data: reviews,
-    });
+    const { data: reviews, error } = await supabase
+      .from("product_reviews")
+      .select("*")
+      .eq("product_id", productId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    res.status(200).json({ success: true, data: reviews });
   } catch (e) {
     console.log(e);
-    res.status(500).json({
-      success: false,
-      message: "Error",
-    });
+    res.status(500).json({ success: false, message: "Error" });
   }
 };
 

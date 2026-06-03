@@ -1,6 +1,6 @@
-const Cart = require("../../models/Cart");
-const Product = require("../../models/Product");
+const supabase = require("../../db/supabase");
 
+// Add to cart
 const addToCart = async (req, res) => {
   try {
     const { userId, productId, quantity } = req.body;
@@ -12,7 +12,12 @@ const addToCart = async (req, res) => {
       });
     }
 
-    const product = await Product.findById(productId);
+    // Check product exists
+    const { data: product } = await supabase
+      .from("products")
+      .select("id")
+      .eq("id", productId)
+      .single();
 
     if (!product) {
       return res.status(404).json({
@@ -21,36 +26,53 @@ const addToCart = async (req, res) => {
       });
     }
 
-    let cart = await Cart.findOne({ userId });
+    // Get or create cart for user
+    let { data: cart } = await supabase
+      .from("carts")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
 
     if (!cart) {
-      cart = new Cart({ userId, items: [] });
+      const { data: newCart, error: cartError } = await supabase
+        .from("carts")
+        .insert({ user_id: userId })
+        .select()
+        .single();
+      if (cartError) throw cartError;
+      cart = newCart;
     }
 
-    const findCurrentProductIndex = cart.items.findIndex(
-      (item) => item.productId.toString() === productId
-    );
+    // Check if item already in cart
+    const { data: existingItem } = await supabase
+      .from("cart_items")
+      .select("id, quantity")
+      .eq("cart_id", cart.id)
+      .eq("product_id", productId)
+      .single();
 
-    if (findCurrentProductIndex === -1) {
-      cart.items.push({ productId, quantity });
+    if (existingItem) {
+      const { error } = await supabase
+        .from("cart_items")
+        .update({ quantity: existingItem.quantity + quantity })
+        .eq("id", existingItem.id);
+      if (error) throw error;
     } else {
-      cart.items[findCurrentProductIndex].quantity += quantity;
+      const { error } = await supabase
+        .from("cart_items")
+        .insert({ cart_id: cart.id, product_id: productId, quantity });
+      if (error) throw error;
     }
 
-    await cart.save();
-    res.status(200).json({
-      success: true,
-      data: cart,
-    });
+    const cartData = await getPopulatedCart(userId);
+    res.status(200).json({ success: true, data: cartData });
   } catch (error) {
     console.log(error);
-    res.status(500).json({
-      success: false,
-      message: "Error",
-    });
+    res.status(500).json({ success: false, message: "Error" });
   }
 };
 
+// Fetch cart items (populated)
 const fetchCartItems = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -58,56 +80,27 @@ const fetchCartItems = async (req, res) => {
     if (!userId) {
       return res.status(400).json({
         success: false,
-        message: "User id is manadatory!",
+        message: "User id is mandatory!",
       });
     }
 
-    const cart = await Cart.findOne({ userId }).populate({
-      path: "items.productId",
-      select: "image title price salePrice",
-    });
+    const cartData = await getPopulatedCart(userId);
 
-    if (!cart) {
+    if (!cartData) {
       return res.status(404).json({
         success: false,
         message: "Cart not found!",
       });
     }
 
-    const validItems = cart.items.filter(
-      (productItem) => productItem.productId
-    );
-
-    if (validItems.length < cart.items.length) {
-      cart.items = validItems;
-      await cart.save();
-    }
-
-    const populateCartItems = validItems.map((item) => ({
-      productId: item.productId._id,
-      image: item.productId.image,
-      title: item.productId.title,
-      price: item.productId.price,
-      salePrice: item.productId.salePrice,
-      quantity: item.quantity,
-    }));
-
-    res.status(200).json({
-      success: true,
-      data: {
-        ...cart._doc,
-        items: populateCartItems,
-      },
-    });
+    res.status(200).json({ success: true, data: cartData });
   } catch (error) {
     console.log(error);
-    res.status(500).json({
-      success: false,
-      message: "Error",
-    });
+    res.status(500).json({ success: false, message: "Error" });
   }
 };
 
+// Update item quantity
 const updateCartItemQty = async (req, res) => {
   try {
     const { userId, productId, quantity } = req.body;
@@ -119,61 +112,47 @@ const updateCartItemQty = async (req, res) => {
       });
     }
 
-    const cart = await Cart.findOne({ userId });
+    const { data: cart } = await supabase
+      .from("carts")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
+
     if (!cart) {
-      return res.status(404).json({
-        success: false,
-        message: "Cart not found!",
-      });
+      return res.status(404).json({ success: false, message: "Cart not found!" });
     }
 
-    const findCurrentProductIndex = cart.items.findIndex(
-      (item) => item.productId.toString() === productId
-    );
+    const { data: item } = await supabase
+      .from("cart_items")
+      .select("id")
+      .eq("cart_id", cart.id)
+      .eq("product_id", productId)
+      .single();
 
-    if (findCurrentProductIndex === -1) {
-      return res.status(404).json({
-        success: false,
-        message: "Cart item not present !",
-      });
+    if (!item) {
+      return res.status(404).json({ success: false, message: "Cart item not present!" });
     }
 
-    cart.items[findCurrentProductIndex].quantity = quantity;
-    await cart.save();
+    const { error } = await supabase
+      .from("cart_items")
+      .update({ quantity })
+      .eq("id", item.id);
 
-    await cart.populate({
-      path: "items.productId",
-      select: "image title price salePrice",
-    });
+    if (error) throw error;
 
-    const populateCartItems = cart.items.map((item) => ({
-      productId: item.productId ? item.productId._id : null,
-      image: item.productId ? item.productId.image : null,
-      title: item.productId ? item.productId.title : "Product not found",
-      price: item.productId ? item.productId.price : null,
-      salePrice: item.productId ? item.productId.salePrice : null,
-      quantity: item.quantity,
-    }));
-
-    res.status(200).json({
-      success: true,
-      data: {
-        ...cart._doc,
-        items: populateCartItems,
-      },
-    });
+    const cartData = await getPopulatedCart(userId);
+    res.status(200).json({ success: true, data: cartData });
   } catch (error) {
     console.log(error);
-    res.status(500).json({
-      success: false,
-      message: "Error",
-    });
+    res.status(500).json({ success: false, message: "Error" });
   }
 };
 
+// Delete a cart item
 const deleteCartItem = async (req, res) => {
   try {
     const { userId, productId } = req.params;
+
     if (!userId || !productId) {
       return res.status(400).json({
         success: false,
@@ -181,57 +160,63 @@ const deleteCartItem = async (req, res) => {
       });
     }
 
-    const cart = await Cart.findOne({ userId }).populate({
-      path: "items.productId",
-      select: "image title price salePrice",
-    });
+    const { data: cart } = await supabase
+      .from("carts")
+      .select("id")
+      .eq("user_id", userId)
+      .single();
 
     if (!cart) {
-      return res.status(404).json({
-        success: false,
-        message: "Cart not found!",
-      });
+      return res.status(404).json({ success: false, message: "Cart not found!" });
     }
 
-    cart.items = cart.items.filter(
-      (item) => item.productId._id.toString() !== productId
-    );
+    const { error } = await supabase
+      .from("cart_items")
+      .delete()
+      .eq("cart_id", cart.id)
+      .eq("product_id", productId);
 
-    await cart.save();
+    if (error) throw error;
 
-    await cart.populate({
-      path: "items.productId",
-      select: "image title price salePrice",
-    });
-
-    const populateCartItems = cart.items.map((item) => ({
-      productId: item.productId ? item.productId._id : null,
-      image: item.productId ? item.productId.image : null,
-      title: item.productId ? item.productId.title : "Product not found",
-      price: item.productId ? item.productId.price : null,
-      salePrice: item.productId ? item.productId.salePrice : null,
-      quantity: item.quantity,
-    }));
-
-    res.status(200).json({
-      success: true,
-      data: {
-        ...cart._doc,
-        items: populateCartItems,
-      },
-    });
+    const cartData = await getPopulatedCart(userId);
+    res.status(200).json({ success: true, data: cartData });
   } catch (error) {
     console.log(error);
-    res.status(500).json({
-      success: false,
-      message: "Error",
-    });
+    res.status(500).json({ success: false, message: "Error" });
   }
 };
 
-module.exports = {
-  addToCart,
-  updateCartItemQty,
-  deleteCartItem,
-  fetchCartItems,
-};
+// Helper: get cart with populated product info
+async function getPopulatedCart(userId) {
+  const { data: cart } = await supabase
+    .from("carts")
+    .select("id")
+    .eq("user_id", userId)
+    .single();
+
+  if (!cart) return null;
+
+  const { data: items } = await supabase
+    .from("cart_items")
+    .select("id, quantity, product_id, products(id, image, title, price, sale_price)")
+    .eq("cart_id", cart.id);
+
+  const populatedItems = (items || [])
+    .filter((item) => item.products)
+    .map((item) => ({
+      productId: item.products.id,
+      image: item.products.image,
+      title: item.products.title,
+      price: item.products.price,
+      salePrice: item.products.sale_price,
+      quantity: item.quantity,
+    }));
+
+  return {
+    _id: cart.id,
+    userId,
+    items: populatedItems,
+  };
+}
+
+module.exports = { addToCart, updateCartItemQty, deleteCartItem, fetchCartItems };

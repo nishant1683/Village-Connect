@@ -43,6 +43,7 @@ function ProductImageUpload({
     if (inputRef.current) {
       inputRef.current.value = "";
     }
+    setUploadedImageUrl("");
   }
 
   async function uploadImageToCloudinary() {

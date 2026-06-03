@@ -1,7 +1,5 @@
 const paypal = require("../../helpers/paypal");
-const Order = require("../../models/Order");
-const Cart = require("../../models/Cart");
-const Product = require("../../models/Product");
+const supabase = require("../../db/supabase");
 
 const createOrder = async (req, res) => {
   try {
@@ -22,12 +20,10 @@ const createOrder = async (req, res) => {
 
     const create_payment_json = {
       intent: "sale",
-      payer: {
-        payment_method: "paypal",
-      },
+      payer: { payment_method: "paypal" },
       redirect_urls: {
-        return_url: "http://localhost:5173/shop/paypal-return",
-        cancel_url: "http://localhost:5173/shop/paypal-cancel",
+        return_url: `${process.env.CLIENT_URL}/shop/paypal-return`,
+        cancel_url: `${process.env.CLIENT_URL}/shop/paypal-cancel`,
       },
       transactions: [
         {
@@ -44,7 +40,7 @@ const createOrder = async (req, res) => {
             currency: "USD",
             total: totalAmount.toFixed(2),
           },
-          description: "description",
+          description: "VillageConnect Order",
         },
       ],
     };
@@ -52,46 +48,49 @@ const createOrder = async (req, res) => {
     paypal.payment.create(create_payment_json, async (error, paymentInfo) => {
       if (error) {
         console.log(error);
-
         return res.status(500).json({
           success: false,
           message: "Error while creating paypal payment",
         });
-      } else {
-        const newlyCreatedOrder = new Order({
-          userId,
-          cartId,
-          cartItems,
-          addressInfo,
-          orderStatus,
-          paymentMethod,
-          paymentStatus,
-          totalAmount,
-          orderDate,
-          orderUpdateDate,
-          paymentId,
-          payerId,
-        });
-
-        await newlyCreatedOrder.save();
-
-        const approvalURL = paymentInfo.links.find(
-          (link) => link.rel === "approval_url"
-        ).href;
-
-        res.status(201).json({
-          success: true,
-          approvalURL,
-          orderId: newlyCreatedOrder._id,
-        });
       }
+
+      const { data: newOrder, error: dbError } = await supabase
+        .from("orders")
+        .insert({
+          user_id: userId,
+          cart_id: cartId,
+          cart_items: cartItems,
+          address_info: addressInfo,
+          order_status: orderStatus,
+          payment_method: paymentMethod,
+          payment_status: paymentStatus,
+          total_amount: totalAmount,
+          order_date: orderDate,
+          order_update_date: orderUpdateDate,
+          payment_id: paymentId,
+          payer_id: payerId,
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.log(dbError);
+        return res.status(500).json({ success: false, message: "Some error occured!" });
+      }
+
+      const approvalURL = paymentInfo.links.find(
+        (link) => link.rel === "approval_url"
+      ).href;
+
+      res.status(201).json({
+        success: true,
+        approvalURL,
+        orderId: newOrder.id,
+      });
     });
   } catch (e) {
     console.log(e);
-    res.status(500).json({
-      success: false,
-      message: "Some error occured!",
-    });
+    res.status(500).json({ success: false, message: "Some error occured!" });
   }
 };
 
@@ -99,51 +98,70 @@ const capturePayment = async (req, res) => {
   try {
     const { paymentId, payerId, orderId } = req.body;
 
-    let order = await Order.findById(orderId);
+    const { data: order } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", orderId)
+      .single();
 
     if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order can not be found",
-      });
+      return res.status(404).json({ success: false, message: "Order can not be found" });
     }
 
-    order.paymentStatus = "paid";
-    order.orderStatus = "confirmed";
-    order.paymentId = paymentId;
-    order.payerId = payerId;
+    // Update order payment info
+    const { error: updateError } = await supabase
+      .from("orders")
+      .update({
+        payment_status: "paid",
+        order_status: "confirmed",
+        payment_id: paymentId,
+        payer_id: payerId,
+        order_update_date: new Date().toISOString(),
+      })
+      .eq("id", orderId);
 
-    for (let item of order.cartItems) {
-      let product = await Product.findById(item.productId);
+    if (updateError) throw updateError;
+
+    // Reduce stock for each item
+    for (let item of order.cart_items) {
+      const { data: product } = await supabase
+        .from("products")
+        .select("id, total_stock, title")
+        .eq("id", item.productId)
+        .single();
 
       if (!product) {
         return res.status(404).json({
           success: false,
-          message: `Not enough stock for this product ${product.title}`,
+          message: `Product not found: ${item.title}`,
         });
       }
 
-      product.totalStock -= item.quantity;
-
-      await product.save();
+      await supabase
+        .from("products")
+        .update({ total_stock: product.total_stock - item.quantity })
+        .eq("id", item.productId);
     }
 
-    const getCartId = order.cartId;
-    await Cart.findByIdAndDelete(getCartId);
+    // Delete the cart
+    if (order.cart_id) {
+      await supabase.from("carts").delete().eq("id", order.cart_id);
+    }
 
-    await order.save();
+    const { data: updatedOrder } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", orderId)
+      .single();
 
     res.status(200).json({
       success: true,
       message: "Order confirmed",
-      data: order,
+      data: updatedOrder,
     });
   } catch (e) {
     console.log(e);
-    res.status(500).json({
-      success: false,
-      message: "Some error occured!",
-    });
+    res.status(500).json({ success: false, message: "Some error occured!" });
   }
 };
 
@@ -151,25 +169,22 @@ const getAllOrdersByUser = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const orders = await Order.find({ userId });
+    const { data: orders, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("user_id", userId)
+      .order("order_date", { ascending: false });
 
-    if (!orders.length) {
-      return res.status(404).json({
-        success: false,
-        message: "No orders found!",
-      });
+    if (error) throw error;
+
+    if (!orders || orders.length === 0) {
+      return res.status(404).json({ success: false, message: "No orders found!" });
     }
 
-    res.status(200).json({
-      success: true,
-      data: orders,
-    });
+    res.status(200).json({ success: true, data: orders });
   } catch (e) {
     console.log(e);
-    res.status(500).json({
-      success: false,
-      message: "Some error occured!",
-    });
+    res.status(500).json({ success: false, message: "Some error occured!" });
   }
 };
 
@@ -177,31 +192,23 @@ const getOrderDetails = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const order = await Order.findById(id);
+    const { data: order, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", id)
+      .single();
 
     if (!order) {
-      return res.status(404).json({
-        success: false,
-        message: "Order not found!",
-      });
+      return res.status(404).json({ success: false, message: "Order not found!" });
     }
 
-    res.status(200).json({
-      success: true,
-      data: order,
-    });
+    if (error) throw error;
+
+    res.status(200).json({ success: true, data: order });
   } catch (e) {
     console.log(e);
-    res.status(500).json({
-      success: false,
-      message: "Some error occured!",
-    });
+    res.status(500).json({ success: false, message: "Some error occured!" });
   }
 };
 
-module.exports = {
-  createOrder,
-  capturePayment,
-  getAllOrdersByUser,
-  getOrderDetails,
-};
+module.exports = { createOrder, capturePayment, getAllOrdersByUser, getOrderDetails };

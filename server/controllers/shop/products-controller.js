@@ -1,53 +1,49 @@
-const Product = require("../../models/Product");
+const supabase = require("../../db/supabase");
 
+// Get filtered + sorted products
 const getFilteredProducts = async (req, res) => {
   try {
     const { category = [], brand = [], sortBy = "price-lowtohigh" } = req.query;
 
-    let filters = {};
+    let query = supabase.from("products").select("*");
 
     if (category.length) {
-      filters.category = { $in: category.split(",") };
+      query = query.in("category", category.split(","));
     }
 
     if (brand.length) {
-      filters.brand = { $in: brand.split(",") };
+      query = query.in("brand", brand.split(","));
     }
 
-    let sort = {};
-
+    // Apply sort
     switch (sortBy) {
       case "price-lowtohigh":
-        sort.price = 1;
-
+        query = query.order("price", { ascending: true });
         break;
       case "price-hightolow":
-        sort.price = -1;
-
+        query = query.order("price", { ascending: false });
         break;
       case "title-atoz":
-        sort.title = 1;
-
+        query = query.order("title", { ascending: true });
         break;
-
       case "title-ztoa":
-        sort.title = -1;
-
+        query = query.order("title", { ascending: false });
         break;
-
       default:
-        sort.price = 1;
+        query = query.order("price", { ascending: true });
         break;
     }
 
-    const products = await Product.find(filters).sort(sort);
+    const { data: products, error } = await query;
+
+    if (error) throw error;
 
     res.status(200).json({
       success: true,
       data: products,
     });
   } catch (e) {
-    console.log(error);
+    console.log(e);
     res.status(500).json({
       success: false,
       message: "Some error occured",
@@ -55,23 +51,32 @@ const getFilteredProducts = async (req, res) => {
   }
 };
 
+// Get single product details
 const getProductDetails = async (req, res) => {
   try {
     const { id } = req.params;
-    const product = await Product.findById(id);
 
-    if (!product)
+    const { data: product, error } = await supabase
+      .from("products")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (!product) {
       return res.status(404).json({
         success: false,
         message: "Product not found!",
       });
+    }
+
+    if (error) throw error;
 
     res.status(200).json({
       success: true,
       data: product,
     });
   } catch (e) {
-    console.log(error);
+    console.log(e);
     res.status(500).json({
       success: false,
       message: "Some error occured",

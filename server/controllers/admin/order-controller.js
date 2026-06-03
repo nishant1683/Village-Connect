@@ -1,10 +1,15 @@
-const Order = require("../../models/Order");
+const supabase = require("../../db/supabase");
 
 const getAllOrdersOfAllUsers = async (req, res) => {
   try {
-    const orders = await Order.find({});
+    const { data: orders, error } = await supabase
+      .from("orders")
+      .select("*")
+      .order("order_date", { ascending: false });
 
-    if (!orders.length) {
+    if (error) throw error;
+
+    if (!orders || orders.length === 0) {
       return res.status(404).json({
         success: false,
         message: "No orders found!",
@@ -28,7 +33,11 @@ const getOrderDetailsForAdmin = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const order = await Order.findById(id);
+    const { data: order, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("id", id)
+      .single();
 
     if (!order) {
       return res.status(404).json({
@@ -36,6 +45,8 @@ const getOrderDetailsForAdmin = async (req, res) => {
         message: "Order not found!",
       });
     }
+
+    if (error) throw error;
 
     res.status(200).json({
       success: true,
@@ -55,16 +66,25 @@ const updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { orderStatus } = req.body;
 
-    const order = await Order.findById(id);
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("id")
+      .eq("id", id)
+      .single();
 
-    if (!order) {
+    if (!existing) {
       return res.status(404).json({
         success: false,
         message: "Order not found!",
       });
     }
 
-    await Order.findByIdAndUpdate(id, { orderStatus });
+    const { error } = await supabase
+      .from("orders")
+      .update({ order_status: orderStatus, order_update_date: new Date().toISOString() })
+      .eq("id", id);
+
+    if (error) throw error;
 
     res.status(200).json({
       success: true,

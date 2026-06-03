@@ -1,5 +1,5 @@
 const { imageUploadUtil } = require("../../helpers/cloudinary");
-const Product = require("../../models/Product");
+const supabase = require("../../db/supabase");
 
 const handleImageUpload = async (req, res) => {
   try {
@@ -20,7 +20,7 @@ const handleImageUpload = async (req, res) => {
   }
 };
 
-//add a new product
+// Add a new product
 const addProduct = async (req, res) => {
   try {
     const {
@@ -35,24 +35,27 @@ const addProduct = async (req, res) => {
       averageReview,
     } = req.body;
 
-    console.log(averageReview, "averageReview");
+    const { data, error } = await supabase
+      .from("products")
+      .insert({
+        image,
+        title,
+        description,
+        category,
+        brand,
+        price,
+        sale_price: salePrice,
+        total_stock: totalStock,
+        average_review: averageReview,
+      })
+      .select()
+      .single();
 
-    const newlyCreatedProduct = new Product({
-      image,
-      title,
-      description,
-      category,
-      brand,
-      price,
-      salePrice,
-      totalStock,
-      averageReview,
-    });
+    if (error) throw error;
 
-    await newlyCreatedProduct.save();
     res.status(201).json({
       success: true,
-      data: newlyCreatedProduct,
+      data,
     });
   } catch (e) {
     console.log(e);
@@ -63,14 +66,16 @@ const addProduct = async (req, res) => {
   }
 };
 
-//fetch all products
-
+// Fetch all products
 const fetchAllProducts = async (req, res) => {
   try {
-    const listOfProducts = await Product.find({});
+    const { data, error } = await supabase.from("products").select("*");
+
+    if (error) throw error;
+
     res.status(200).json({
       success: true,
-      data: listOfProducts,
+      data,
     });
   } catch (e) {
     console.log(e);
@@ -81,7 +86,7 @@ const fetchAllProducts = async (req, res) => {
   }
 };
 
-//edit a product
+// Edit a product
 const editProduct = async (req, res) => {
   try {
     const { id } = req.params;
@@ -97,28 +102,42 @@ const editProduct = async (req, res) => {
       averageReview,
     } = req.body;
 
-    let findProduct = await Product.findById(id);
-    if (!findProduct)
+    const { data: existing, error: findError } = await supabase
+      .from("products")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (!existing) {
       return res.status(404).json({
         success: false,
         message: "Product not found",
       });
+    }
 
-    findProduct.title = title || findProduct.title;
-    findProduct.description = description || findProduct.description;
-    findProduct.category = category || findProduct.category;
-    findProduct.brand = brand || findProduct.brand;
-    findProduct.price = price === "" ? 0 : price || findProduct.price;
-    findProduct.salePrice =
-      salePrice === "" ? 0 : salePrice || findProduct.salePrice;
-    findProduct.totalStock = totalStock || findProduct.totalStock;
-    findProduct.image = image || findProduct.image;
-    findProduct.averageReview = averageReview || findProduct.averageReview;
+    const { data, error } = await supabase
+      .from("products")
+      .update({
+        image: image || existing.image,
+        title: title || existing.title,
+        description: description || existing.description,
+        category: category || existing.category,
+        brand: brand || existing.brand,
+        price: price === "" ? 0 : price || existing.price,
+        sale_price: salePrice === "" ? 0 : salePrice || existing.sale_price,
+        total_stock: totalStock || existing.total_stock,
+        average_review: averageReview || existing.average_review,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .select()
+      .single();
 
-    await findProduct.save();
+    if (error) throw error;
+
     res.status(200).json({
       success: true,
-      data: findProduct,
+      data,
     });
   } catch (e) {
     console.log(e);
@@ -129,21 +148,30 @@ const editProduct = async (req, res) => {
   }
 };
 
-//delete a product
+// Delete a product
 const deleteProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const product = await Product.findByIdAndDelete(id);
 
-    if (!product)
+    const { data, error } = await supabase
+      .from("products")
+      .delete()
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (!data) {
       return res.status(404).json({
         success: false,
         message: "Product not found",
       });
+    }
+
+    if (error) throw error;
 
     res.status(200).json({
       success: true,
-      message: "Product delete successfully",
+      message: "Product deleted successfully",
     });
   } catch (e) {
     console.log(e);
