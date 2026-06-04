@@ -2,6 +2,7 @@ import {
   BadgeCheck,
   ChartNoAxesCombined,
   LayoutDashboard,
+  MapPin,
   ShoppingBasket,
 } from "lucide-react";
 import { Fragment } from "react";
@@ -9,6 +10,12 @@ import { useNavigate } from "react-router-dom";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "../ui/sheet";
 
 const adminSidebarMenuItems = [
+  {
+    id: "create-location",
+    label: "Create Location",
+    path: "/admin/create-location",
+    icon: <MapPin />,
+  },
   {
     id: "dashboard",
     label: "Dashboard",

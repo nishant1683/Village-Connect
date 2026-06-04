@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import axios from "axios";
+import { API_URL } from "@/config/api-url";
 
 const initialState = {
   isAuthenticated: false,
@@ -12,7 +13,7 @@ export const registerUser = createAsyncThunk(
 
   async (formData) => {
     const response = await axios.post(
-      "http://localhost:5000/api/auth/register",
+      `${API_URL}/api/auth/register`,
       formData,
       {
         withCredentials: true,
@@ -26,16 +27,24 @@ export const registerUser = createAsyncThunk(
 export const loginUser = createAsyncThunk(
   "/auth/login",
 
-  async (formData) => {
-    const response = await axios.post(
-      "http://localhost:5000/api/auth/login",
-      formData,
-      {
-        withCredentials: true,
-      }
-    );
+  async (formData, { rejectWithValue }) => {
+    try {
+      const response = await axios.post(
+        `${API_URL}/api/auth/login`,
+        formData,
+        {
+          withCredentials: true,
+        }
+      );
 
-    return response.data;
+      return response.data;
+    } catch (error) {
+      console.error("Login request error:", error.response?.data || error.message);
+      return rejectWithValue({
+        success: false,
+        message: error.response?.data?.message || "Network error. Please try again.",
+      });
+    }
   }
 );
 
@@ -44,7 +53,7 @@ export const logoutUser = createAsyncThunk(
 
   async () => {
     const response = await axios.post(
-      "http://localhost:5000/api/auth/logout",
+      `${API_URL}/api/auth/logout`,
       {},
       {
         withCredentials: true,
@@ -60,14 +69,19 @@ export const checkAuth = createAsyncThunk(
 
   async (_, { rejectWithValue }) => {
     try {
+      const token = localStorage.getItem("vc_user_token") || localStorage.getItem("vc_admin_token");
+      const headers = {
+        "Cache-Control":
+          "no-store, no-cache, must-revalidate, proxy-revalidate",
+      };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
       const response = await axios.get(
-        "http://localhost:5000/api/auth/check-auth",
+        `${API_URL}/api/auth/check-auth`,
         {
           withCredentials: true,
-          headers: {
-            "Cache-Control":
-              "no-store, no-cache, must-revalidate, proxy-revalidate",
-          },
+          headers,
         }
       );
 
@@ -85,7 +99,11 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
-    setUser: (state, action) => {},
+    setUser: (state, action) => {
+      state.user = action.payload;
+      state.isAuthenticated = !!action.payload;
+      state.isLoading = false;
+    },
   },
   extraReducers: (builder) => {
     builder

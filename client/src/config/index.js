@@ -59,6 +59,7 @@ export const addProductFormElements = [
     componentType: "select",
     options: [
       { id: "vegetable", label: "Vegetables" },
+      { id: "fruit", label: "Fruit" },
       { id: "oil", label: "Oil" },
       { id: "grain", label: "Grain" },
       { id: "egg", label: "Egg" },
@@ -66,10 +67,11 @@ export const addProductFormElements = [
     ],
   },
   {
-    label: "Brand",
+    label: "Brand (Optional)",
     name: "brand",
     componentType: "select",
     options: [
+      { id: "no_brand", label: "No Brand / Local Seller" },
       { id: "vegetable", label: "Vegetables" },
       { id: "fortune_refined_oil", label: "Fortune Refined Oil" },
       { id: "fortune_mustard_oil", label: "Fortune Mustard Oil" },
@@ -106,6 +108,7 @@ export const shoppingViewHeaderMenuItems = [
   { id: "home", label: "Home", path: "/shop/home" },
   { id: "products", label: "Products", path: "/shop/listing" },
   { id: "vegetable", label: "Vegetable", path: "/shop/listing" },
+  { id: "fruit", label: "Fruit", path: "/shop/listing" },
   { id: "oil", label: "Oil", path: "/shop/listing" },
   { id: "grain", label: "Grain", path: "/shop/listing" },
   { id: "egg", label: "Egg", path: "/shop/listing" },
@@ -115,6 +118,7 @@ export const shoppingViewHeaderMenuItems = [
 
 export const categoryOptionsMap = {
   vegetable: "Vegetable", 
+  fruit: "Fruit",
   oil: "Oil",
   grain: "Grain",
   egg: "Egg",
@@ -134,6 +138,7 @@ export const brandOptionsMap = {
 export const filterOptions = {
   category: [
     { id: "vegetable", label: "Vegetables" },
+    { id: "fruit", label: "Fruit" },
     { id: "oil", label: "Oil" },
     { id: "grain", label: "Grain" },
     { id: "egg", label: "Egg" },

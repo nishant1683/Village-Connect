@@ -23,7 +23,6 @@
     "@reduxjs/toolkit": "^2.2.7",
     "axios": "^1.7.4",
     "class-variance-authority": "^0.7.0",
-    "client": "file:",
     "clsx": "^2.1.1",
     "lucide-react": "^0.429.0",
     "razorpay": "^2.9.5",

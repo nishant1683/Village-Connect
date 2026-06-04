@@ -6,6 +6,7 @@ import {
   Egg,
   Fish,
   Amphora,
+  Apple,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useEffect, useState } from "react";
@@ -23,6 +24,7 @@ import { getFeatureImages } from "@/store/common-slice";
 
 const categoriesWithIcon = [
   { id: "vegetable", label: "Vegetable", icon: LeafyGreen },
+  { id: "fruit", label: "Fruit", icon: Apple },
   { id: "oil", label: "Oil", icon: Amphora },
   { id: "grain", label: "Grain", icon: Wheat },
   { id: "egg", label: "Egg", icon: Egg },

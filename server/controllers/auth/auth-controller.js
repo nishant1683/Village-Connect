@@ -46,7 +46,7 @@ const registerUser = async (req, res) => {
 
 // Login
 const loginUser = async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, role } = req.body;
 
   try {
     const { data: checkUser, error } = await supabase
@@ -54,6 +54,14 @@ const loginUser = async (req, res) => {
       .select("*")
       .eq("email", email)
       .maybeSingle();
+
+    if (error) {
+      console.error("Supabase login query error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Database error. Please try again later.",
+      });
+    }
 
     if (!checkUser) {
       return res.json({
@@ -67,6 +75,17 @@ const loginUser = async (req, res) => {
       return res.json({
         success: false,
         message: "Incorrect password! Please try again",
+      });
+    }
+
+    // Validate the selected role against the user's actual role in the database
+    if (role && role !== checkUser.role) {
+      return res.json({
+        success: false,
+        message:
+          role === "admin"
+            ? "You are not authorized as an admin. Please login as a user."
+            : "This account has admin privileges. Please login as admin.",
       });
     }
 
@@ -92,7 +111,7 @@ const loginUser = async (req, res) => {
       },
     });
   } catch (e) {
-    console.log(e);
+    console.error("Login error:", e);
     res.status(500).json({
       success: false,
       message: "Some error occured",
@@ -110,7 +129,15 @@ const logoutUser = (req, res) => {
 
 // Auth Middleware
 const authMiddleware = async (req, res, next) => {
-  const token = req.cookies.token;
+  let token = req.cookies ? req.cookies.token : null;
+
+  if (!token) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      token = authHeader.split(" ")[1];
+    }
+  }
+
   if (!token) {
     return res.status(401).json({
       success: false,
@@ -130,4 +157,221 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
-module.exports = { registerUser, loginUser, logoutUser, authMiddleware };
+// New User Login
+const userLogin = async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const { data: checkUser, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Supabase login query error:", error);
+      return res.status(500).json({ success: false, message: "Database error" });
+    }
+
+    if (!checkUser) {
+      return res.json({ success: false, message: "User doesn't exist! Please register first" });
+    }
+
+    const checkPasswordMatch = await bcrypt.compare(password, checkUser.password);
+    if (!checkPasswordMatch) {
+      return res.json({ success: false, message: "Incorrect password! Please try again" });
+    }
+
+    if (checkUser.role !== "user") {
+      return res.json({ success: false, message: "Access denied. Please log in through the Admin Portal." });
+    }
+
+    const token = jwt.sign(
+      {
+        id: checkUser.id,
+        role: checkUser.role,
+        email: checkUser.email,
+        userName: checkUser.username,
+        name: checkUser.username,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "60m" }
+    );
+
+    res.status(200).json({
+      success: true,
+      token,
+      user: {
+        id: checkUser.id,
+        name: checkUser.username,
+        userName: checkUser.username,
+        email: checkUser.email,
+        role: checkUser.role,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// New User Register
+const userRegister = async (req, res) => {
+  const { name, email, password } = req.body;
+  try {
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (existingUser) {
+      return res.json({ success: false, message: "User Already exists with the same email! Please try again" });
+    }
+
+    const hashPassword = await bcrypt.hash(password, 12);
+
+    const { data: newUser, error } = await supabase
+      .from("users")
+      .insert({ username: name, email, password: hashPassword, role: "user" })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    const token = jwt.sign(
+      {
+        id: newUser.id,
+        role: newUser.role,
+        email: newUser.email,
+        userName: newUser.username,
+        name: newUser.username,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "60m" }
+    );
+
+    res.status(200).json({
+      success: true,
+      token,
+      user: {
+        id: newUser.id,
+        name: newUser.username,
+        userName: newUser.username,
+        email: newUser.email,
+        role: newUser.role,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// New Admin Login
+const adminLogin = async (req, res) => {
+  const { email, password, adminCode } = req.body;
+  try {
+    if (adminCode !== process.env.ADMIN_SECRET_CODE) {
+      return res.json({ success: false, message: "Invalid Admin Access Code!" });
+    }
+
+    const { data: checkUser, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Supabase login query error:", error);
+      return res.status(500).json({ success: false, message: "Database error" });
+    }
+
+    if (!checkUser) {
+      return res.json({ success: false, message: "Admin user doesn't exist!" });
+    }
+
+    const checkPasswordMatch = await bcrypt.compare(password, checkUser.password);
+    if (!checkPasswordMatch) {
+      return res.json({ success: false, message: "Incorrect password! Please try again" });
+    }
+
+    if (checkUser.role !== "admin") {
+      return res.json({ success: false, message: "Access denied. This portal is for administrators only." });
+    }
+
+    const token = jwt.sign(
+      {
+        id: checkUser.id,
+        role: checkUser.role,
+        email: checkUser.email,
+        userName: checkUser.username,
+        name: checkUser.username,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "60m" }
+    );
+
+    res.status(200).json({
+      success: true,
+      token,
+      admin: {
+        id: checkUser.id,
+        name: checkUser.username,
+        userName: checkUser.username,
+        email: checkUser.email,
+        role: checkUser.role,
+      },
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// Verify Token
+const verifyToken = async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ success: false, message: "Unauthorized: No token provided" });
+  }
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (decoded.role === "admin") {
+      return res.status(200).json({
+        valid: true,
+        admin: {
+          id: decoded.id,
+          name: decoded.userName || decoded.name,
+          userName: decoded.userName || decoded.name,
+          email: decoded.email,
+          role: decoded.role,
+        },
+      });
+    } else {
+      return res.status(200).json({
+        valid: true,
+        user: {
+          id: decoded.id,
+          name: decoded.userName || decoded.name,
+          userName: decoded.userName || decoded.name,
+          email: decoded.email,
+          role: decoded.role,
+        },
+      });
+    }
+  } catch (error) {
+    return res.status(401).json({ success: false, message: "Unauthorized: Invalid or expired token" });
+  }
+};
+
+module.exports = {
+  registerUser,
+  loginUser,
+  logoutUser,
+  authMiddleware,
+  userLogin,
+  userRegister,
+  adminLogin,
+  verifyToken,
+};

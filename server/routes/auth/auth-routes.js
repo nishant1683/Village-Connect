@@ -4,6 +4,10 @@ const {
   loginUser,
   logoutUser,
   authMiddleware,
+  userLogin,
+  userRegister,
+  adminLogin,
+  verifyToken,
 } = require("../../controllers/auth/auth-controller");
 
 const router = express.Router();
@@ -19,5 +23,11 @@ router.get("/check-auth", authMiddleware, (req, res) => {
     user,
   });
 });
+
+// New Separate Endpoints
+router.post("/user/login", userLogin);
+router.post("/user/register", userRegister);
+router.post("/admin/login", adminLogin);
+router.get("/verify", verifyToken);
 
 module.exports = router;
