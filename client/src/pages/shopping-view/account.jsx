@@ -2,6 +2,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import accImg from "../../assets/account.jpg";
 import Address from "@/components/shopping-view/address";
 import ShoppingOrders from "@/components/shopping-view/orders";
+import ChangePassword from "@/components/shopping-view/change-password";
 
 function ShoppingAccount() {
   return (
@@ -15,15 +16,19 @@ function ShoppingAccount() {
       <div className="container mx-auto grid grid-cols-1 gap-8 py-8">
         <div className="flex flex-col rounded-lg border bg-background p-6 shadow-sm">
           <Tabs defaultValue="orders">
-            <TabsList>
+            <TabsList className="mb-4">
               <TabsTrigger value="orders">Orders</TabsTrigger>
               <TabsTrigger value="address">Address</TabsTrigger>
+              <TabsTrigger value="security">Security</TabsTrigger>
             </TabsList>
             <TabsContent value="orders">
               <ShoppingOrders />
             </TabsContent>
             <TabsContent value="address">
               <Address />
+            </TabsContent>
+            <TabsContent value="security">
+              <ChangePassword />
             </TabsContent>
           </Tabs>
         </div>
@@ -33,3 +38,4 @@ function ShoppingAccount() {
 }
 
 export default ShoppingAccount;
+

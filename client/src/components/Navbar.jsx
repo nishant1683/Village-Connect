@@ -37,31 +37,33 @@ export default function Navbar() {
   const navLinks = [
     { name: "Home", path: "/shop/home" },
     { name: "Products", path: "/shop/listing" },
+    { name: "About", path: "/about" },
+    { name: "Contact", path: "/contact" },
   ];
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b border-emerald-800/10 bg-white/80 backdrop-blur-md">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
+        <div className="flex h-16 items-center justify-between relative">
           {/* Logo */}
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-2">
             <Link to="/shop/home" className="flex items-center gap-2">
               <img src={logoImg} alt="Village-Connect" className="h-10 w-auto object-contain" />
               <span className="font-bold text-emerald-900 text-lg">Village-Connect</span>
             </Link>
+          </div>
 
-            {/* Desktop Navigation Links */}
-            <div className="hidden md:flex items-center gap-6">
-              {navLinks.map((link) => (
-                <Link
-                  key={link.name}
-                  to={link.path}
-                  className="text-sm font-semibold text-emerald-900/80 hover:text-emerald-950 transition-colors"
-                >
-                  {link.name}
-                </Link>
-              ))}
-            </div>
+          {/* Desktop Navigation Links */}
+          <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-6">
+            {navLinks.map((link) => (
+              <Link
+                key={link.name}
+                to={link.path}
+                className="text-sm font-semibold text-emerald-900/80 hover:text-emerald-950 transition-colors"
+              >
+                {link.name}
+              </Link>
+            ))}
           </div>
 
           {/* Desktop Right Side */}

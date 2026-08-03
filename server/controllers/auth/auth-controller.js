@@ -169,7 +169,11 @@ const userLogin = async (req, res) => {
 
     if (error) {
       console.error("Supabase login query error:", error);
-      return res.status(500).json({ success: false, message: "Database error" });
+      const isConnError = error.message?.includes("fetch failed") || error.details?.includes("ENOTFOUND");
+      const errMsg = isConnError
+        ? "Database connection failed. Please check your SUPABASE_URL in server/.env or ensure your Supabase project is active."
+        : "Database error during login.";
+      return res.status(500).json({ success: false, message: errMsg });
     }
 
     if (!checkUser) {
@@ -283,7 +287,11 @@ const adminLogin = async (req, res) => {
 
     if (error) {
       console.error("Supabase login query error:", error);
-      return res.status(500).json({ success: false, message: "Database error" });
+      const isConnError = error.message?.includes("fetch failed") || error.details?.includes("ENOTFOUND");
+      const errMsg = isConnError
+        ? "Database connection failed. Please check your SUPABASE_URL in server/.env or ensure your Supabase project is active."
+        : "Database error during login.";
+      return res.status(500).json({ success: false, message: errMsg });
     }
 
     if (!checkUser) {
@@ -365,6 +373,71 @@ const verifyToken = async (req, res) => {
   }
 };
 
+// Change Password
+const changePassword = async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  const userId = req.user?.id;
+
+  if (!oldPassword || !newPassword) {
+    return res.json({
+      success: false,
+      message: "Please provide both current password and new password.",
+    });
+  }
+
+  if (newPassword.length < 6) {
+    return res.json({
+      success: false,
+      message: "New password must be at least 6 characters long.",
+    });
+  }
+
+  try {
+    const { data: user, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error || !user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.json({
+        success: false,
+        message: "Incorrect current password. Please try again.",
+      });
+    }
+
+    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({ password: hashedNewPassword })
+      .eq("id", userId);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Password changed successfully!",
+    });
+  } catch (error) {
+    console.error("Change password error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error occurred while updating password.",
+    });
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -374,4 +447,6 @@ module.exports = {
   userRegister,
   adminLogin,
   verifyToken,
+  changePassword,
 };
+

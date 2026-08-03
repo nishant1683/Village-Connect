@@ -1,8 +1,9 @@
 import ProductImageUpload from "@/components/admin-view/image-upload";
 import { Button } from "@/components/ui/button";
-import { addFeatureImage, getFeatureImages } from "@/store/common-slice";
+import { addFeatureImage, getFeatureImages, deleteFeatureImage } from "@/store/common-slice";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { Trash2 } from "lucide-react";
 
 export default function AdminDashboard() {
   const [imageFile, setImageFile] = useState(null);
@@ -19,6 +20,14 @@ export default function AdminDashboard() {
         dispatch(getFeatureImages());
         setImageFile(null);
         setUploadedImageUrl("");
+      }
+    });
+  }
+
+  function handleDeleteFeatureImage(id) {
+    dispatch(deleteFeatureImage(id)).then((data) => {
+      if (data?.payload?.success) {
+        dispatch(getFeatureImages());
       }
     });
   }
@@ -57,6 +66,14 @@ export default function AdminDashboard() {
                   className="w-full h-[300px] object-cover rounded-t-lg"
                   alt={`Banner ${idx}`}
                 />
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-2 right-2 bg-red-600 hover:bg-red-700 text-white rounded-full p-2 shadow-lg"
+                  onClick={() => handleDeleteFeatureImage(featureImgItem.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
               </div>
             ))
           : null}

@@ -19,10 +19,13 @@ import {
 import ShoppingHome from "./pages/shopping-view/home";
 import ShoppingListing from "./pages/shopping-view/listing";
 import SearchProducts from "./pages/shopping-view/search";
+import AboutPage from "./pages/shopping-view/about";
+import ContactPage from "./pages/shopping-view/contact";
 
 // User-protected shopping pages
 import ShoppingCheckout from "./pages/shopping-view/checkout";
 import ShoppingAccount from "./pages/shopping-view/account";
+import ShoppingCartPage from "./pages/shopping-view/cart";
 import PaypalReturnPage from "./pages/shopping-view/paypal-return";
 import PaymentSuccessPage from "./pages/shopping-view/payment-success";
 
@@ -74,6 +77,22 @@ function App() {
             </MainLayout>
           }
         />
+        <Route
+          path="/about"
+          element={
+            <MainLayout>
+              <AboutPage />
+            </MainLayout>
+          }
+        />
+        <Route
+          path="/contact"
+          element={
+            <MainLayout>
+              <ContactPage />
+            </MainLayout>
+          }
+        />
 
         {/* ── User-protected shopping pages ── */}
         <Route
@@ -92,6 +111,16 @@ function App() {
             <UserProtectedRoute>
               <MainLayout>
                 <ShoppingAccount />
+              </MainLayout>
+            </UserProtectedRoute>
+          }
+        />
+        <Route
+          path="/cart"
+          element={
+            <UserProtectedRoute>
+              <MainLayout>
+                <ShoppingCartPage />
               </MainLayout>
             </UserProtectedRoute>
           }

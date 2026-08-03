@@ -8,6 +8,7 @@ const {
   userRegister,
   adminLogin,
   verifyToken,
+  changePassword,
 } = require("../../controllers/auth/auth-controller");
 
 const router = express.Router();
@@ -29,5 +30,7 @@ router.post("/user/login", userLogin);
 router.post("/user/register", userRegister);
 router.post("/admin/login", adminLogin);
 router.get("/verify", verifyToken);
+router.post("/change-password", authMiddleware, changePassword);
 
 module.exports = router;
+

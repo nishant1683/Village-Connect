@@ -73,9 +73,26 @@ const fetchAllProducts = async (req, res) => {
 
     if (error) throw error;
 
+    // Map snake_case Supabase fields to camelCase for frontend
+    const mappedProducts = (data || []).map((p) => ({
+      _id: p.id,
+      id: p.id,
+      image: p.image,
+      title: p.title,
+      description: p.description,
+      category: p.category,
+      brand: p.brand,
+      price: p.price,
+      salePrice: p.sale_price,
+      totalStock: p.total_stock,
+      averageReview: p.average_review,
+      created_at: p.created_at,
+      updated_at: p.updated_at,
+    }));
+
     res.status(200).json({
       success: true,
-      data,
+      data: mappedProducts,
     });
   } catch (e) {
     console.log(e);

@@ -56,6 +56,25 @@ app.use("/api/shop/review", shopReviewRouter);
 
 app.use("/api/common/feature", commonFeatureRouter);
 
-app.listen(PORT, () => console.log(`Server is now running on port ${PORT}`));
+const supabase = require("./db/supabase");
+
+app.listen(PORT, async () => {
+  console.log(`Server is now running on port ${PORT}`);
+  try {
+    if (!process.env.SUPABASE_URL || process.env.SUPABASE_URL.includes("YOUR_SUPABASE_PROJECT_REF")) {
+      console.warn("⚠️  [Supabase]: Environment variables are using placeholders. Update server/.env with your Supabase credentials.");
+    } else {
+      const { error } = await supabase.from("users").select("id").limit(1);
+      if (error) {
+        console.warn("⚠️  [Supabase]: Connection check warning -", error.message);
+      } else {
+        console.log("✅ [Supabase]: Connected successfully to database!");
+      }
+    }
+  } catch (err) {
+    console.warn("⚠️  [Supabase]: Connection error -", err.message);
+  }
+});
 
 module.exports = app;
+

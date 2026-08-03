@@ -1,0 +1,11 @@
+{
+  "name": "village-connect",
+  "version": "1.0.0",
+  "description": "VillageConnect root package for deployment",
+  "main": "server.js",
+  "scripts": {
+    "postinstall": "cd server && npm install",
+    "start": "node server/server.js",
+    "build": "cd server && npm install"
+  }
+}

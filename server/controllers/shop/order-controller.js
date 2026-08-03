@@ -18,42 +18,79 @@ const createOrder = async (req, res) => {
       cartId,
     } = req.body;
 
-    const create_payment_json = {
-      intent: "sale",
-      payer: { payment_method: "paypal" },
-      redirect_urls: {
-        return_url: `${process.env.CLIENT_URL}/shop/paypal-return`,
-        cancel_url: `${process.env.CLIENT_URL}/shop/paypal-cancel`,
-      },
-      transactions: [
-        {
-          item_list: {
-            items: cartItems.map((item) => ({
-              name: item.title,
-              sku: item.productId,
-              price: item.price.toFixed(2),
-              currency: "USD",
-              quantity: item.quantity,
-            })),
-          },
-          amount: {
-            currency: "USD",
-            total: totalAmount.toFixed(2),
-          },
-          description: "VillageConnect Order",
+    if (paymentMethod === "paypal") {
+      const create_payment_json = {
+        intent: "sale",
+        payer: { payment_method: "paypal" },
+        redirect_urls: {
+          return_url: `${process.env.CLIENT_URL}/shop/paypal-return`,
+          cancel_url: `${process.env.CLIENT_URL}/shop/paypal-cancel`,
         },
-      ],
-    };
+        transactions: [
+          {
+            item_list: {
+              items: cartItems.map((item) => ({
+                name: item.title,
+                sku: item.productId,
+                price: item.price.toFixed(2),
+                currency: "USD",
+                quantity: item.quantity,
+              })),
+            },
+            amount: {
+              currency: "USD",
+              total: totalAmount.toFixed(2),
+            },
+            description: "VillageConnect Order",
+          },
+        ],
+      };
 
-    paypal.payment.create(create_payment_json, async (error, paymentInfo) => {
-      if (error) {
-        console.log(error);
-        return res.status(500).json({
-          success: false,
-          message: "Error while creating paypal payment",
+      paypal.payment.create(create_payment_json, async (error, paymentInfo) => {
+        if (error) {
+          console.log(error);
+          return res.status(500).json({
+            success: false,
+            message: "Error while creating paypal payment",
+          });
+        }
+
+        const { data: newOrder, error: dbError } = await supabase
+          .from("orders")
+          .insert({
+            user_id: userId,
+            cart_id: cartId,
+            cart_items: cartItems,
+            address_info: addressInfo,
+            order_status: orderStatus,
+            payment_method: paymentMethod,
+            payment_status: paymentStatus,
+            total_amount: totalAmount,
+            order_date: orderDate,
+            order_update_date: orderUpdateDate,
+            payment_id: paymentId,
+            payer_id: payerId,
+          })
+          .select()
+          .single();
+
+        if (dbError) {
+          console.log(dbError);
+          return res.status(500).json({ success: false, message: "Some error occured!" });
+        }
+
+        const approvalURL = paymentInfo.links.find(
+          (link) => link.rel === "approval_url"
+        ).href;
+
+        res.status(201).json({
+          success: true,
+          approvalURL,
+          orderId: newOrder.id,
         });
-      }
-
+      });
+    } else {
+      // Direct insertion for local/INR payment method
       const { data: newOrder, error: dbError } = await supabase
         .from("orders")
         .insert({
@@ -61,14 +98,14 @@ const createOrder = async (req, res) => {
           cart_id: cartId,
           cart_items: cartItems,
           address_info: addressInfo,
-          order_status: orderStatus,
+          order_status: "confirmed", // auto confirmed for local/INR payment
           payment_method: paymentMethod,
-          payment_status: paymentStatus,
+          payment_status: "paid", // set as paid
           total_amount: totalAmount,
           order_date: orderDate,
           order_update_date: orderUpdateDate,
-          payment_id: paymentId,
-          payer_id: payerId,
+          payment_id: "local_inr_" + Date.now(),
+          payer_id: "local_inr_" + userId,
         })
         .select()
         .single();
@@ -78,16 +115,33 @@ const createOrder = async (req, res) => {
         return res.status(500).json({ success: false, message: "Some error occured!" });
       }
 
-      const approvalURL = paymentInfo.links.find(
-        (link) => link.rel === "approval_url"
-      ).href;
+      // Reduce stock for each item
+      for (let item of cartItems) {
+        const { data: product } = await supabase
+          .from("products")
+          .select("id, total_stock, title")
+          .eq("id", item.productId)
+          .single();
+
+        if (product) {
+          await supabase
+            .from("products")
+            .update({ total_stock: product.total_stock - item.quantity })
+            .eq("id", item.productId);
+        }
+      }
+
+      // Delete the cart
+      if (cartId) {
+        await supabase.from("carts").delete().eq("id", cartId);
+      }
 
       res.status(201).json({
         success: true,
-        approvalURL,
+        approvalURL: null,
         orderId: newOrder.id,
       });
-    });
+    }
   } catch (e) {
     console.log(e);
     res.status(500).json({ success: false, message: "Some error occured!" });

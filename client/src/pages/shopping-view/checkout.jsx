@@ -5,7 +5,7 @@ import UserCartItemsContent from "@/components/shopping-view/cart-items-content"
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { createNewOrder } from "@/store/shop/order-slice";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useToast } from "@/components/ui/use-toast";
 
 function ShoppingCheckout() {
@@ -16,6 +16,7 @@ function ShoppingCheckout() {
   const [isPaymentStart, setIsPaymemntStart] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("paypal"); // Added for payment method selection
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { toast } = useToast();
 
   const totalCartAmount =
@@ -32,7 +33,7 @@ function ShoppingCheckout() {
       : 0;
 
   function handleInitiatePayment() {
-    if (cartItems.length === 0) {
+    if (!cartItems || !cartItems.items || cartItems.items.length === 0) {
       toast({
         title: "Your cart is empty. Please add items to proceed",
         variant: "destructive",
@@ -78,28 +79,31 @@ function ShoppingCheckout() {
       payerId: "",
     };
 
-    if (paymentMethod === "paypal") {
-      dispatch(createNewOrder(orderData)).then((data) => {
-        if (data?.payload?.success) {
-          setIsPaymemntStart(true);
+    setIsPaymemntStart(true);
+
+    dispatch(createNewOrder(orderData)).then((data) => {
+      if (data?.payload?.success) {
+        if (paymentMethod === "paypal") {
+          // approvalURL will redirect automatically in the render check below
         } else {
+          toast({
+            title: "Payment and Order placed successfully!",
+            variant: "success",
+          });
           setIsPaymemntStart(false);
+          navigate("/shop/payment-success");
         }
-      });
-    } else {
-      // Logic for INR payment
-      setIsPaymemntStart(true);
-      setTimeout(() => {
-        toast({
-          title: "Payment is done successfully!",
-          variant: "success",
-        });
+      } else {
         setIsPaymemntStart(false);
-      }, 2000); // Simulating payment completion
-    }
+        toast({
+          title: "Failed to place order. Please try again.",
+          variant: "destructive",
+        });
+      }
+    });
   }
 
-  if (approvalURL) {
+  if (approvalURL && paymentMethod === "paypal") {
     window.location.href = approvalURL;
   }
 

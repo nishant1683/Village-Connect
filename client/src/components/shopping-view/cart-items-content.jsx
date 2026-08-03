@@ -20,18 +20,19 @@ function UserCartItemsContent({ cartItem }) {
           (item) => item.productId === getCartItem?.productId
         );
 
-        const getCurrentProductIndex = productList.findIndex(
-          (product) => product._id === getCartItem?.productId
-        );
-        const getTotalStock = productList[getCurrentProductIndex].totalStock;
+        const getCurrentProductIndex = productList ? productList.findIndex(
+          (product) => product.id === getCartItem?.productId
+        ) : -1;
+        
+        const getTotalStock = getCurrentProductIndex > -1 ? productList[getCurrentProductIndex].totalStock : null;
 
         console.log(getCurrentProductIndex, getTotalStock, "getTotalStock");
 
-        if (indexOfCurrentCartItem > -1) {
+        if (indexOfCurrentCartItem > -1 && getTotalStock !== null) {
           const getQuantity = getCartItems[indexOfCurrentCartItem].quantity;
           if (getQuantity + 1 > getTotalStock) {
             toast({
-              title: `Only Rs {getQuantity} quantity can be added for this item`,
+              title: `Only ${getTotalStock} quantity can be added for this item`,
               variant: "destructive",
             });
 
